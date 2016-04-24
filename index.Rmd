@@ -20,3 +20,114 @@ In this project, our goal is to use data from accelerometers on the belt, forear
 
 More information is available from the website here: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset).
 
+### Data
+
+#### The training data for this project is sourced from:
+
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+#### And the test data from:
+
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The original source for this data this project comes from this source: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har). We are allowed to use it in our documents, so we are happy to cite them. We regard them allowing their data for free use as being very generous.
+
+## Data Processing
+
+### Get data 
+```{r getdata}
+library(utils)
+if(!file.exists("pml-training.csv")) {
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", 
+                  destfile = "pml-training.csv", method = "curl", quiet = TRUE)
+}
+if(!file.exists("pml-testing.csv")) {
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", 
+                  destfile = "pml-testing.csv", method = "curl", quiet = TRUE)
+}
+
+```
+
+The codebook for the data can be downloaded [from](https://) 
+
+The content of the database is further described by Groupware@LES [Weight Lifting Exercises Dataset](http://groupware.les.inf.puc-rio.br/har). 
+
+
+```{r, message=FALSE}
+# configure multicore
+library(doMC)
+registerDoMC(cores=4)
+```
+
+
+## Loading and preprocessing the data
+
+```{r }
+library(data.table)
+pmltrain <- read.csv("pml-training.csv")
+pmltrainDT <- fread("pml-training.csv", header = TRUE)  #, drop=c("REMARKS"), colClasses = c(COUNTYENDN = "numeric")))
+pmlcols <- colnames(pmltrainDT)
+pmltest <- read.csv("pml-testing.csv")
+```
+bad records look like:
+
+"9276","carlitos",1323084280,984287,"05/12/2011 11:24","yes",857,1.59,6.04,-92.8,3,"0.306838","#DIV/0!","#DIV/0!","1.515258","#DIV/0!","#DIV/0!",-92.7,3,"0.3",-92.8,3,"0.3",0.1,0,"0.00",0,1.459,0.2084,0.0434,5.5224,0.3449,0.1189,-92.7796,0.0407,0.0017,0.1,-0.02,0.02,-11,2,22,2,600,-305,145,-39.6,-59.3,37,195.2959,120.3959,35.8246,1283.4008,-31.501,10.9604,120.1309,-31.6378,60.5739,3669.1924,2.54,-1.49,0.41,90,-54,-346,543,-328,-357,"-0.08050","-1.12444","-1.30096","0.43756","0.66821","-0.10863",-3.1,85,55,-48.1,-91.8,10,45,176.8,45,104.3,50.1,15.3,"-0.4636","5.8136","#DIV/0!","-0.3063","1.7846","#DIV/0!",50.8,100.2,"-0.5",-64.1,-25.6,"-0.5",114.83,125.83,"0.00",17,25.4966,62.7327,107.7609,11612.41,11.848,28.1797,794.0938,15.3372,22.3276,498.5227,-0.03,0.66,-0.33,79,142,25,-194,583,-10,131,32.7,131,"-1.3994","0.0515","#DIV/0!","0.1896","1.1783","#DIV/0!",55.9,175,"-1.4",17.8,-178,"-1.4",38.1,353,"0.00",32,20.89201,-58.59184,139.81698,19548.78827,35.0551,12.95446,167.81794,-39.92653,102.57126,10520.86324,-0.61,2.62,0.56,-98,263,-141,-652,558,710,"B"
+
+```{r}
+# http://stackoverflow.com/questions/2643939/remove-columns-from-dataframe-where-all-values-are-na
+pmltestNNA <- Filter(function(x)!all(is.na(x)), pmltest)
+colNNA <- colnames(pmltestNNA)
+```
+
+```{r}
+pmltrainX <- pmltrain[!complete.cases(pmltrain),]
+pmltrainXNNA <- Filter(function(x)!all(is.na(x)), pmltrainX)
+pmltrainXNNAe <- Filter(function(x)!all((x == "")), pmltrainXNNA)
+colXNNAe <- colnames(pmltrainXNNAe)
+colNNA == colXNNAe
+```
+
+## prediction model
+
+```{r}
+library(caret)
+contrlcv <- trainControl(method = "cv",
+                           number = 10,
+                           allowParallel = TRUE)
+
+modfitrf <- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60],
+                  method="rf",data=pmltrainXNNAe,trControl = contrlcv)
+
+```
+
+To look at a summary of the model's performance, a print of the model is the easiest way:
+
+```{r}
+modfitrf
+```
+
+
+```{r}
+predtestrf <- predict(modfitrf, pmltestNNA[,8:59])
+predtestrf
+```
+
+compare to C5.0
+
+```{r}
+grid_c50 <- expand.grid(.model = "tree",
+                          .trials = c(10, 20, 30, 40),
+                          .winnow = "FALSE")
+modfitc50 <- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60], method = "C5.0",
+                 metric = "Kappa", trControl = contrlcv,
+                 tuneGrid = grid_c50)
+predtestc50 <- predict(modfitrf, pmltestNNA[,8:59])
+predtestc50
+## [1] B A B A A E D B A A B C B A E E A B B B
+```
+
+
+
+```{r}
+predtestc50 == predtestrf
+```

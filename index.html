@@ -124,6 +124,124 @@ $(document).ready(function () {
 <p>Using devices such as <em>Jawbone Up</em>, <em>Nike FuelBand</em>, and <em>Fitbit</em> it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.</p>
 <p>In this project, our goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.</p>
 <p>More information is available from the website here: <a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a> (see the section on the Weight Lifting Exercise Dataset).</p>
+<div id="data" class="section level3">
+<h3>Data</h3>
+<div id="the-training-data-for-this-project-is-sourced-from" class="section level4">
+<h4>The training data for this project is sourced from:</h4>
+<p><a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" class="uri">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv</a></p>
+</div>
+<div id="and-the-test-data-from" class="section level4">
+<h4>And the test data from:</h4>
+<p><a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" class="uri">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv</a></p>
+<p>The original source for this data this project comes from this source: <a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a>. We are allowed to use it in our documents, so we are happy to cite them. We regard them allowing their data for free use as being very generous.</p>
+</div>
+</div>
+</div>
+<div id="data-processing" class="section level2">
+<h2>Data Processing</h2>
+<div id="get-data" class="section level3">
+<h3>Get data</h3>
+<pre class="r"><code>library(utils)
+if(!file.exists(&quot;pml-training.csv&quot;)) {
+    download.file(&quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv&quot;, 
+                  destfile = &quot;pml-training.csv&quot;, method = &quot;curl&quot;, quiet = TRUE)
+}
+if(!file.exists(&quot;pml-testing.csv&quot;)) {
+    download.file(&quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv&quot;, 
+                  destfile = &quot;pml-testing.csv&quot;, method = &quot;curl&quot;, quiet = TRUE)
+}</code></pre>
+<p>The codebook for the data can be downloaded <a href="https://">from</a></p>
+<p>The content of the database is further described by <a href="mailto:Groupware@LES">Groupware@LES</a> <a href="http://groupware.les.inf.puc-rio.br/har">Weight Lifting Exercises Dataset</a>.</p>
+<pre class="r"><code># configure multicore
+library(doMC)
+registerDoMC(cores=4)</code></pre>
+</div>
+</div>
+<div id="loading-and-preprocessing-the-data" class="section level2">
+<h2>Loading and preprocessing the data</h2>
+<pre class="r"><code>library(data.table)
+pmltrain &lt;- read.csv(&quot;pml-training.csv&quot;)
+pmltrainDT &lt;- fread(&quot;pml-training.csv&quot;, header = TRUE)  #, drop=c(&quot;REMARKS&quot;), colClasses = c(COUNTYENDN = &quot;numeric&quot;)))
+pmlcols &lt;- colnames(pmltrainDT)
+pmltest &lt;- read.csv(&quot;pml-testing.csv&quot;)</code></pre>
+<p>bad records look like:</p>
+<p>“9276”,“carlitos”,1323084280,984287,“05/12/2011 11:24”,“yes”,857,1.59,6.04,-92.8,3,“0.306838”,“#DIV/0!”,“#DIV/0!”,“1.515258”,“#DIV/0!”,“#DIV/0!”,-92.7,3,“0.3”,-92.8,3,“0.3”,0.1,0,“0.00”,0,1.459,0.2084,0.0434,5.5224,0.3449,0.1189,-92.7796,0.0407,0.0017,0.1,-0.02,0.02,-11,2,22,2,600,-305,145,-39.6,-59.3,37,195.2959,120.3959,35.8246,1283.4008,-31.501,10.9604,120.1309,-31.6378,60.5739,3669.1924,2.54,-1.49,0.41,90,-54,-346,543,-328,-357,“-0.08050”,“-1.12444”,“-1.30096”,“0.43756”,“0.66821”,“-0.10863”,-3.1,85,55,-48.1,-91.8,10,45,176.8,45,104.3,50.1,15.3,“-0.4636”,“5.8136”,“#DIV/0!”,“-0.3063”,“1.7846”,“#DIV/0!”,50.8,100.2,“-0.5”,-64.1,-25.6,“-0.5”,114.83,125.83,“0.00”,17,25.4966,62.7327,107.7609,11612.41,11.848,28.1797,794.0938,15.3372,22.3276,498.5227,-0.03,0.66,-0.33,79,142,25,-194,583,-10,131,32.7,131,“-1.3994”,“0.0515”,“#DIV/0!”,“0.1896”,“1.1783”,“#DIV/0!”,55.9,175,“-1.4”,17.8,-178,“-1.4”,38.1,353,“0.00”,32,20.89201,-58.59184,139.81698,19548.78827,35.0551,12.95446,167.81794,-39.92653,102.57126,10520.86324,-0.61,2.62,0.56,-98,263,-141,-652,558,710,“B”</p>
+<pre class="r"><code># http://stackoverflow.com/questions/2643939/remove-columns-from-dataframe-where-all-values-are-na
+pmltestNNA &lt;- Filter(function(x)!all(is.na(x)), pmltest)
+colNNA &lt;- colnames(pmltestNNA)</code></pre>
+<pre class="r"><code>pmltrainX &lt;- pmltrain[!complete.cases(pmltrain),]
+pmltrainXNNA &lt;- Filter(function(x)!all(is.na(x)), pmltrainX)
+pmltrainXNNAe &lt;- Filter(function(x)!all((x == &quot;&quot;)), pmltrainXNNA)
+colXNNAe &lt;- colnames(pmltrainXNNAe)
+colNNA == colXNNAe</code></pre>
+<pre><code>##  [1]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+## [12]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+## [23]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+## [34]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+## [45]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+## [56]  TRUE  TRUE  TRUE  TRUE FALSE</code></pre>
+</div>
+<div id="prediction-model" class="section level2">
+<h2>prediction model</h2>
+<pre class="r"><code>library(caret)</code></pre>
+<pre><code>## Loading required package: lattice</code></pre>
+<pre><code>## Loading required package: ggplot2</code></pre>
+<pre class="r"><code>contrlcv &lt;- trainControl(method = &quot;cv&quot;,
+                           number = 10,
+                           allowParallel = TRUE)
+
+modfitrf &lt;- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60],
+                  method=&quot;rf&quot;,data=pmltrainXNNAe,trControl = contrlcv)</code></pre>
+<pre><code>## Loading required package: randomForest</code></pre>
+<pre><code>## randomForest 4.6-12</code></pre>
+<pre><code>## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre><code>## 
+## Attaching package: 'randomForest'</code></pre>
+<pre><code>## The following object is masked from 'package:ggplot2':
+## 
+##     margin</code></pre>
+<p>To look at a summary of the model’s performance, a print of the model is the easiest way:</p>
+<pre class="r"><code>modfitrf</code></pre>
+<pre><code>## Random Forest 
+## 
+## 19216 samples
+##    52 predictor
+##     5 classes: 'A', 'B', 'C', 'D', 'E' 
+## 
+## No pre-processing
+## Resampling: Cross-Validated (10 fold) 
+## Summary of sample sizes: 17292, 17296, 17294, 17294, 17294, 17294, ... 
+## Resampling results across tuning parameters:
+## 
+##   mtry  Accuracy   Kappa    
+##    2    0.9949521  0.9936137
+##   27    0.9950041  0.9936797
+##   52    0.9907372  0.9882808
+## 
+## Accuracy was used to select the optimal model using  the largest value.
+## The final value used for the model was mtry = 27.</code></pre>
+<pre class="r"><code>predtestrf &lt;- predict(modfitrf, pmltestNNA[,8:59])
+predtestrf</code></pre>
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E</code></pre>
+<p>compare to C5.0</p>
+<pre class="r"><code>grid_c50 &lt;- expand.grid(.model = &quot;tree&quot;,
+                          .trials = c(10, 20, 30, 40),
+                          .winnow = &quot;FALSE&quot;)
+modfitc50 &lt;- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60], method = &quot;C5.0&quot;,
+                 metric = &quot;Kappa&quot;, trControl = contrlcv,
+                 tuneGrid = grid_c50)</code></pre>
+<pre><code>## Loading required package: C50</code></pre>
+<pre><code>## Loading required package: plyr</code></pre>
+<pre><code>## Warning in Ops.factor(x$winnow): '!' not meaningful for factors</code></pre>
+<pre class="r"><code>predtestc50 &lt;- predict(modfitrf, pmltestNNA[,8:59])
+predtestc50</code></pre>
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E</code></pre>
+<pre class="r"><code>## [1] B A B A A E D B A A B C B A E E A B B B</code></pre>
+<pre class="r"><code>predtestc50 == predtestrf</code></pre>
+<pre><code>##  [1] TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE
+## [15] TRUE TRUE TRUE TRUE TRUE TRUE</code></pre>
 </div>
 
 
