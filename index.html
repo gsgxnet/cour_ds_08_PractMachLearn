@@ -161,45 +161,39 @@ registerDoMC(cores=4)</code></pre>
 <h2>Loading and preprocessing the data</h2>
 <pre class="r"><code>library(data.table)
 pmltrain &lt;- read.csv(&quot;pml-training.csv&quot;)
-pmltrainDT &lt;- fread(&quot;pml-training.csv&quot;, header = TRUE)  #, drop=c(&quot;REMARKS&quot;), colClasses = c(COUNTYENDN = &quot;numeric&quot;)))
-pmlcols &lt;- colnames(pmltrainDT)
+pmlcols &lt;- colnames(pmltrain)
 pmltest &lt;- read.csv(&quot;pml-testing.csv&quot;)</code></pre>
-<p>bad records look like:</p>
+<p>Looking at the tables shows 2 problems:</p>
+<ol style="list-style-type: decimal">
+<li><p>the testing dataset contains only 60 columns with data, the other columns contain either NA or are blank.</p></li>
+<li><p>in the training set there are 2 kinds of rows - normal ones like those in the testing set and others with a very different content, not similar to any row in the testing set.</p></li>
+</ol>
+<p>“bad”&quot; records look like:</p>
 <p>“9276”,“carlitos”,1323084280,984287,“05/12/2011 11:24”,“yes”,857,1.59,6.04,-92.8,3,“0.306838”,“#DIV/0!”,“#DIV/0!”,“1.515258”,“#DIV/0!”,“#DIV/0!”,-92.7,3,“0.3”,-92.8,3,“0.3”,0.1,0,“0.00”,0,1.459,0.2084,0.0434,5.5224,0.3449,0.1189,-92.7796,0.0407,0.0017,0.1,-0.02,0.02,-11,2,22,2,600,-305,145,-39.6,-59.3,37,195.2959,120.3959,35.8246,1283.4008,-31.501,10.9604,120.1309,-31.6378,60.5739,3669.1924,2.54,-1.49,0.41,90,-54,-346,543,-328,-357,“-0.08050”,“-1.12444”,“-1.30096”,“0.43756”,“0.66821”,“-0.10863”,-3.1,85,55,-48.1,-91.8,10,45,176.8,45,104.3,50.1,15.3,“-0.4636”,“5.8136”,“#DIV/0!”,“-0.3063”,“1.7846”,“#DIV/0!”,50.8,100.2,“-0.5”,-64.1,-25.6,“-0.5”,114.83,125.83,“0.00”,17,25.4966,62.7327,107.7609,11612.41,11.848,28.1797,794.0938,15.3372,22.3276,498.5227,-0.03,0.66,-0.33,79,142,25,-194,583,-10,131,32.7,131,“-1.3994”,“0.0515”,“#DIV/0!”,“0.1896”,“1.1783”,“#DIV/0!”,55.9,175,“-1.4”,17.8,-178,“-1.4”,38.1,353,“0.00”,32,20.89201,-58.59184,139.81698,19548.78827,35.0551,12.95446,167.81794,-39.92653,102.57126,10520.86324,-0.61,2.62,0.56,-98,263,-141,-652,558,710,“B”</p>
+<p>These might be some kind of aggregations of other records. But as they have no resemblence in the testing set, they should be regarded like outliers and eliminated.</p>
+<p>Removing empty columns from the testing set:</p>
 <pre class="r"><code># http://stackoverflow.com/questions/2643939/remove-columns-from-dataframe-where-all-values-are-na
 pmltestNNA &lt;- Filter(function(x)!all(is.na(x)), pmltest)
 colNNA &lt;- colnames(pmltestNNA)</code></pre>
+<p>eliminating the “bad” records and empty columns from the training set.</p>
 <pre class="r"><code>pmltrainX &lt;- pmltrain[!complete.cases(pmltrain),]
 pmltrainXNNA &lt;- Filter(function(x)!all(is.na(x)), pmltrainX)
 pmltrainXNNAe &lt;- Filter(function(x)!all((x == &quot;&quot;)), pmltrainXNNA)
 colXNNAe &lt;- colnames(pmltrainXNNAe)
-colNNA == colXNNAe</code></pre>
-<pre><code>##  [1]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
-## [12]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
-## [23]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
-## [34]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
-## [45]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
-## [56]  TRUE  TRUE  TRUE  TRUE FALSE</code></pre>
+coltesttrainequal &lt;- colNNA == colXNNAe
+which(!coltesttrainequal)</code></pre>
+<pre><code>## [1] 60</code></pre>
+<p>After this cleaning step, both sets have the same columns, besides col 60 which contains the classe in the training set and the case number in the testing set.</p>
 </div>
 <div id="prediction-model" class="section level2">
 <h2>prediction model</h2>
-<pre class="r"><code>library(caret)</code></pre>
-<pre><code>## Loading required package: lattice</code></pre>
-<pre><code>## Loading required package: ggplot2</code></pre>
-<pre class="r"><code>contrlcv &lt;- trainControl(method = &quot;cv&quot;,
+<p>First we fit a random forest model thru the caret library. To make it a reliable model we include a 10-fold cross validation.</p>
+<pre class="r"><code>library(caret)
+contrlcv &lt;- trainControl(method = &quot;cv&quot;,
                            number = 10,
                            allowParallel = TRUE)
-
 modfitrf &lt;- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60],
                   method=&quot;rf&quot;,data=pmltrainXNNAe,trControl = contrlcv)</code></pre>
-<pre><code>## Loading required package: randomForest</code></pre>
-<pre><code>## randomForest 4.6-12</code></pre>
-<pre><code>## Type rfNews() to see new features/changes/bug fixes.</code></pre>
-<pre><code>## 
-## Attaching package: 'randomForest'</code></pre>
-<pre><code>## The following object is masked from 'package:ggplot2':
-## 
-##     margin</code></pre>
 <p>To look at a summary of the model’s performance, a print of the model is the easiest way:</p>
 <pre class="r"><code>modfitrf</code></pre>
 <pre><code>## Random Forest 
@@ -210,16 +204,17 @@ modfitrf &lt;- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60],
 ## 
 ## No pre-processing
 ## Resampling: Cross-Validated (10 fold) 
-## Summary of sample sizes: 17292, 17296, 17294, 17294, 17294, 17294, ... 
+## Summary of sample sizes: 17295, 17294, 17294, 17295, 17295, 17294, ... 
 ## Resampling results across tuning parameters:
 ## 
 ##   mtry  Accuracy   Kappa    
-##    2    0.9949521  0.9936137
-##   27    0.9950041  0.9936797
-##   52    0.9907372  0.9882808
+##    2    0.9951603  0.9938772
+##   27    0.9951083  0.9938114
+##   52    0.9902686  0.9876878
 ## 
 ## Accuracy was used to select the optimal model using  the largest value.
-## The final value used for the model was mtry = 27.</code></pre>
+## The final value used for the model was mtry = 2.</code></pre>
+<p>We get a very reliable model with an out of sample accuray of 99.5%.</p>
 <pre class="r"><code>predtestrf &lt;- predict(modfitrf, pmltestNNA[,8:59])
 predtestrf</code></pre>
 <pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
@@ -238,10 +233,13 @@ modfitc50 &lt;- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60], method = &q
 predtestc50</code></pre>
 <pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
 ## Levels: A B C D E</code></pre>
-<pre class="r"><code>## [1] B A B A A E D B A A B C B A E E A B B B</code></pre>
-<pre class="r"><code>predtestc50 == predtestrf</code></pre>
-<pre><code>##  [1] TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE
-## [15] TRUE TRUE TRUE TRUE TRUE TRUE</code></pre>
+<p>this C5.0 tree model is even more reliable than the random forest.</p>
+<p>There is no sign of overfitting.</p>
+<pre class="r"><code>modeq &lt;- predtestc50 == predtestrf
+which(!modeq)</code></pre>
+<pre><code>## integer(0)</code></pre>
+<p>Both models agree in the predictions for all cases of the testing set. So there could be no gain at all in continuing with a further kind of prediction model, as part of an ensemble it would be overvoted by these two agreeing models.</p>
+<p>Some of the used methods are extending the course material. These are described in the book: <a href="https://www.packtpub.com/big-data-and-business-intelligence/machine-learning-r">Machine Learning with R</a>, Brett Lantz - October 2013</p>
 </div>
 
 

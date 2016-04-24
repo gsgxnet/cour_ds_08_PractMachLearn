@@ -45,7 +45,6 @@ if(!file.exists("pml-testing.csv")) {
     download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", 
                   destfile = "pml-testing.csv", method = "curl", quiet = TRUE)
 }
-
 ```
 
 The codebook for the data can be downloaded [from](https://) 
@@ -65,36 +64,54 @@ registerDoMC(cores=4)
 ```{r }
 library(data.table)
 pmltrain <- read.csv("pml-training.csv")
-pmltrainDT <- fread("pml-training.csv", header = TRUE)  #, drop=c("REMARKS"), colClasses = c(COUNTYENDN = "numeric")))
-pmlcols <- colnames(pmltrainDT)
+pmlcols <- colnames(pmltrain)
 pmltest <- read.csv("pml-testing.csv")
 ```
-bad records look like:
+
+Looking at the tables shows 2 problems:
+
+1. the testing dataset contains only 60 columns with data, the other columns contain either NA or are blank. 
+
+2. in the training set there are 2 kinds of rows - normal ones like those in the testing set and others with a very different content, not similar to any row in the testing set. 
+
+"bad"" records look like:
 
 "9276","carlitos",1323084280,984287,"05/12/2011 11:24","yes",857,1.59,6.04,-92.8,3,"0.306838","#DIV/0!","#DIV/0!","1.515258","#DIV/0!","#DIV/0!",-92.7,3,"0.3",-92.8,3,"0.3",0.1,0,"0.00",0,1.459,0.2084,0.0434,5.5224,0.3449,0.1189,-92.7796,0.0407,0.0017,0.1,-0.02,0.02,-11,2,22,2,600,-305,145,-39.6,-59.3,37,195.2959,120.3959,35.8246,1283.4008,-31.501,10.9604,120.1309,-31.6378,60.5739,3669.1924,2.54,-1.49,0.41,90,-54,-346,543,-328,-357,"-0.08050","-1.12444","-1.30096","0.43756","0.66821","-0.10863",-3.1,85,55,-48.1,-91.8,10,45,176.8,45,104.3,50.1,15.3,"-0.4636","5.8136","#DIV/0!","-0.3063","1.7846","#DIV/0!",50.8,100.2,"-0.5",-64.1,-25.6,"-0.5",114.83,125.83,"0.00",17,25.4966,62.7327,107.7609,11612.41,11.848,28.1797,794.0938,15.3372,22.3276,498.5227,-0.03,0.66,-0.33,79,142,25,-194,583,-10,131,32.7,131,"-1.3994","0.0515","#DIV/0!","0.1896","1.1783","#DIV/0!",55.9,175,"-1.4",17.8,-178,"-1.4",38.1,353,"0.00",32,20.89201,-58.59184,139.81698,19548.78827,35.0551,12.95446,167.81794,-39.92653,102.57126,10520.86324,-0.61,2.62,0.56,-98,263,-141,-652,558,710,"B"
+
+These might be some kind of aggregations of other records. But as they have no resemblence in the testing set, they should be regarded like outliers and eliminated.
+
+Removing empty columns from the testing set:
 
 ```{r}
 # http://stackoverflow.com/questions/2643939/remove-columns-from-dataframe-where-all-values-are-na
 pmltestNNA <- Filter(function(x)!all(is.na(x)), pmltest)
 colNNA <- colnames(pmltestNNA)
+
 ```
+
+eliminating the "bad" records and empty columns from the training set.
 
 ```{r}
 pmltrainX <- pmltrain[!complete.cases(pmltrain),]
 pmltrainXNNA <- Filter(function(x)!all(is.na(x)), pmltrainX)
 pmltrainXNNAe <- Filter(function(x)!all((x == "")), pmltrainXNNA)
 colXNNAe <- colnames(pmltrainXNNAe)
-colNNA == colXNNAe
+coltesttrainequal <- colNNA == colXNNAe
+which(!coltesttrainequal)
 ```
+
+After this cleaning step, both sets have the same columns, besides col 60 which contains the classe in the training set and the case number in the testing set.
+
 
 ## prediction model
 
-```{r}
+First we fit a random forest model thru the caret library. To make it a reliable model we include a 10-fold cross validation. 
+
+```{r, message=FALSE}
 library(caret)
 contrlcv <- trainControl(method = "cv",
                            number = 10,
                            allowParallel = TRUE)
-
 modfitrf <- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60],
                   method="rf",data=pmltrainXNNAe,trControl = contrlcv)
 
@@ -106,6 +123,7 @@ To look at a summary of the model's performance, a print of the model is the eas
 modfitrf
 ```
 
+We get a very reliable model with an out of sample accuray of 99.5%. 
 
 ```{r}
 predtestrf <- predict(modfitrf, pmltestNNA[,8:59])
@@ -123,11 +141,19 @@ modfitc50 <- train(x= pmltrainXNNAe[,8:59], y=pmltrainXNNAe[,60], method = "C5.0
                  tuneGrid = grid_c50)
 predtestc50 <- predict(modfitrf, pmltestNNA[,8:59])
 predtestc50
-## [1] B A B A A E D B A A B C B A E E A B B B
 ```
 
+this C5.0 tree model is even more reliable than the random forest.
 
+There is no sign of overfitting.
 
 ```{r}
-predtestc50 == predtestrf
+modeq <- predtestc50 == predtestrf
+which(!modeq)
 ```
+
+Both models agree in the predictions for all cases of the testing set. 
+So there could be no gain at all in continuing with a further kind of prediction model, as part of an ensemble it would be overvoted by these two agreeing models.
+
+Some of the used methods are extending the course material. These are described in the book:
+[Machine Learning with R](https://www.packtpub.com/big-data-and-business-intelligence/machine-learning-r), Brett Lantz - October 2013
